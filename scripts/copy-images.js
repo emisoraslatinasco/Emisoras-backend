@@ -41,8 +41,13 @@ const LOGO_FOLDERS = {
   'logos_emisoras-uruguay': 'UY',
   'logos_emisoras-usa': 'US',
   'logos_emisoras-venezuela': 'VE',
-  'logos_peru_ecuador': 'PE', // Carpeta especial para Perú y Ecuador
+  'logos_peru_ecuador': 'PE', // Perú
 };
+
+// Caso especial: Ecuador comparte carpeta con Perú
+const SPECIAL_MAPPINGS = [
+  { folder: 'logos_peru_ecuador', countryCode: 'EC' }
+];
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
@@ -102,6 +107,20 @@ async function main() {
       console.log(`  ✅ ${countryCode}: ${count} logos`);
     } else {
       console.log(`  ⚠️ ${folder} no encontrada`);
+    }
+  }
+
+  // Procesar casos especiales (carpetas compartidas)
+  if (typeof SPECIAL_MAPPINGS !== 'undefined') {
+    for (const mapping of SPECIAL_MAPPINGS) {
+      const logosSrc = path.join(FRONTEND_PUBLIC, mapping.folder);
+      const logosDest = path.join(logosBaseDest, mapping.countryCode);
+      
+      if (fs.existsSync(logosSrc)) {
+        const count = copyDir(logosSrc, logosDest);
+        totalLogos += count;
+        console.log(`  ✅ ${mapping.countryCode} (desde ${mapping.folder}): ${count} logos`);
+      }
     }
   }
   
