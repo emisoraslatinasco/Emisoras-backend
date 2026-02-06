@@ -183,6 +183,80 @@ export class StationsService {
       .sort();
   }
 
+  /**
+   * SEO 2.0: Obtener emisora con emisoras relacionadas
+   * PRIORIDAD 1: Emisoras de la misma ciudad (mejor SEO local)
+   * PRIORIDAD 2: Emisoras del mismo género (fallback)
+   */
+  async findBySlugWithRelated(
+    slug: string,
+  ): Promise<{ station: Station; relatedStations: Station[] }> {
+    const station = await this.findBySlug(slug);
+
+    // PRIORIDAD 1: Intentar encontrar 6 emisoras de la misma CIUDAD
+    let relatedStations = await this.stationRepository
+      .createQueryBuilder('station')
+      .leftJoinAndSelect('station.country', 'country')
+      .leftJoinAndSelect('station.genres', 'genre')
+      .leftJoinAndSelect('station.socialNetworks', 'socialNetwork')
+      .where('station.activo = :activo', { activo: true })
+      .andWhere('station.slug != :slug', { slug })
+      .andWhere('station.ciudad = :ciudad', { ciudad: station.ciudad })
+      .take(20) // Obtener más para tener variedad
+      .getMany();
+
+    // Shuffle en memoria para aleatoriedad (evita error SQL con RANDOM() + DISTINCT)
+    relatedStations = this.shuffleArray(relatedStations).slice(0, 6);
+
+    // FALLBACK: Si no hay suficientes de la misma ciudad, rellenar con género
+    if (relatedStations.length < 6 && station.genres.length > 0) {
+      const needed = 6 - relatedStations.length;
+      const genreIds = station.genres.map((g) => g.id);
+
+      const relatedByGenre = await this.stationRepository
+        .createQueryBuilder('station')
+        .leftJoinAndSelect('station.country', 'country')
+        .leftJoinAndSelect('station.genres', 'genre')
+        .leftJoinAndSelect('station.socialNetworks', 'socialNetwork')
+        .where('station.activo = :activo', { activo: true })
+        .andWhere('station.slug != :slug', { slug })
+        .andWhere('genre.id IN (:...genreIds)', { genreIds })
+        .take(needed * 3) // Obtener más para shuffle
+        .getMany();
+
+      // Shuffle y tomar solo los necesarios
+      const shuffled = this.shuffleArray(relatedByGenre).slice(0, needed);
+
+      relatedStations = [...relatedStations, ...shuffled];
+    }
+
+    return { station, relatedStations };
+  }
+
+  /**
+   * SEO 2.0: Obtener todos los slugs para generación de sitemaps
+   * Lee directamente de la base de datos (no de archivos JSON)
+   */
+  async getAllSlugs(): Promise<
+    Array<{ slug: string; countryCode: string; updatedAt: Date }>
+  > {
+    const stations = await this.stationRepository
+      .createQueryBuilder('station')
+      .leftJoin('station.country', 'country')
+      .select(['station.slug', 'country.code', 'station.updatedAt'])
+      .where('station.activo = :activo', { activo: true })
+      .andWhere('station.slug IS NOT NULL')
+      .orderBy('country.code', 'ASC')
+      .addOrderBy('station.nombre', 'ASC')
+      .getMany();
+
+    return stations.map((s) => ({
+      slug: s.slug,
+      countryCode: s.country.code,
+      updatedAt: s.updatedAt,
+    }));
+  }
+
   // Methods for seeding
   async create(data: Partial<Station>): Promise<Station> {
     const station = this.stationRepository.create(data);
@@ -222,5 +296,18 @@ export class StationsService {
     if (lowerUrl.includes('youtube')) return 'youtube';
     if (lowerUrl.includes('tiktok')) return 'tiktok';
     return null;
+  }
+
+  /**
+   * Mezcla aleatoriamente un array usando el algoritmo Fisher-Yates
+   * Necesario porque ORDER BY RANDOM() causa error SQL con SELECT DISTINCT (joins)
+   */
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }
 }
