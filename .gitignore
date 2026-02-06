@@ -36,6 +36,7 @@ Thumbs.db
 # dotenv environment variables file
 .env
 .env.test
+.env.example
 
 # nest
 /dist/

@@ -97,4 +97,38 @@ export class StationsController {
   async getGenresByCountry(@Param('code') code: string): Promise<string[]> {
     return this.stationsService.getGenresByCountry(code);
   }
+
+  // ========== SEO 2.0: Nuevos endpoints ==========
+
+  @Get('stations/:slug/full')
+  @ApiOperation({
+    summary: 'Obtener emisora con emisoras relacionadas para SEO',
+    description:
+      'Devuelve la emisora y 6 emisoras relacionadas priorizando por ciudad',
+  })
+  @ApiParam({ name: 'slug', description: 'Slug de la emisora' })
+  @ApiResponse({
+    status: 200,
+    description: 'Emisora con emisoras relacionadas',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Emisora no encontrada',
+  })
+  async findBySlugWithRelated(@Param('slug') slug: string) {
+    return this.stationsService.findBySlugWithRelated(slug);
+  }
+
+  @Get('stations/slugs/all')
+  @ApiOperation({
+    summary: 'Obtener lista de todos los slugs para sitemaps',
+    description: 'Lee directamente de la base de datos para generación de sitemaps dinámicos',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de slugs con código de país y fecha de actualización',
+  })
+  async getAllSlugs() {
+    return this.stationsService.getAllSlugs();
+  }
 }
